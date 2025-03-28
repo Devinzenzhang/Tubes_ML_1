@@ -1,6 +1,8 @@
 from tqdm import tqdm  # Progress bar
 import dill
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from Layer import Layer, OutputLayer
 
@@ -49,32 +51,52 @@ class FFNN:
     num_of_batches_val = len(X_batches_val)
     training_loss_array = []
     val_loss_array = []
-    batches_loss_array = []
+    batches_loss_array = np.array([])
     for i in range (num_epochs):
       progress = range(num_of_batches_train + num_of_batches_val)
       if (verbose == 1): # show progress bar
         progress = tqdm(progress, desc=f"Epoch {i+1}/{num_epochs}", unit="batch")
 
-      batches_loss_array.clear()
+      batches_loss_array = np.array([])
       for j in range (num_of_batches_train):
-        batches_loss_array.append(self.forward_propagation(X_batches_train[j], Y_batches_train[j]))
+        batches_loss_array = np.append(batches_loss_array, self.forward_propagation(X_batches_train[j], Y_batches_train[j])[0].data)
         if (verbose == 1):
           progress.set_postfix({"Batch Loss": batches_loss_array[j]})
           progress.update(1)
         self.back_propagation(learning_rate)
       training_loss_array.append(batches_loss_array.mean())
-      batches_loss_array.clear()
+      batches_loss_array = np.array([])
       for j in range (num_of_batches_val):
-        batches_loss_array.append(self.forward_propagation(X_batches_val[j], Y_batches_val[j]))
+        batches_loss_array = np.append(batches_loss_array, self.forward_propagation(X_batches_val[j], Y_batches_val[j])[0].data)
+        if (verbose == 1): progress.update(1)
       val_loss_array.append(batches_loss_array.mean())
 
       if (verbose == 1):
         (print(f"Epoch {i+1}: Train Loss = {training_loss_array[i]}, Val Loss = {val_loss_array[i]}"))
     return training_loss_array, val_loss_array
 
-  # def weight_distribution
+  def weight_distribution(self, layers_list):
+    # layers_list itu list of integer layer mana saja yang weightnya di plot (mulai dari 0 itu input layer)
+    for i in range (len(layers_list)):
+      weight_flat = np.vectorize(lambda x: x.data)(self.input_and_hidden_layers[layers_list[i]].weights.data).flatten()
+      plt.figure(figsize=(8, 5))
+      sns.histplot(weight_flat, bins=50, kde=True, color="blue")
+      plt.title("Weight Distribution for layer " + str(layers_list[i]))
+      plt.xlabel("Weight Value")
+      plt.ylabel("Frequency")
+      plt.grid(True)
+      plt.show()
 
-  # def gradient_distribution
+  def gradient_distribution(self, layers_list):
+    for i in range (len(layers_list)):
+      weight_gradient_flat = np.vectorize(lambda x: x.data)(self.input_and_hidden_layers[layers_list[i]].weight_gradients.data).flatten()
+      plt.figure(figsize=(8, 5))
+      sns.histplot(weight_gradient_flat, bins=50, kde=True, color="blue")
+      plt.title("Weight Gradient Distribution for layer " + str(layers_list[i]))
+      plt.xlabel("Weight Gradient Value")
+      plt.ylabel("Frequency")
+      plt.grid(True)
+      plt.show()
 
   def save_model(self, filename):
     with open(filename, "wb") as f:

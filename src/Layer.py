@@ -1,6 +1,6 @@
 import numpy as np
 
-from ValueTensor import ValueTensor, criterion
+from ValueTensor import Value, ValueTensor, criterion
 
 class initialization:
   # kelas untuk inisialisasi bobot tiap neuron layer
@@ -62,6 +62,7 @@ class Layer:
     self.next_raw = None # untuk simpan data nilai layer selanjutnya yang belum diberi fungsi aktivasi
     self.next_activated = None # untuk simpan data nilai layer selanjutnya yang sudah diberi fungsi aktivasi
     self.next_error = None # untuk simpan gradien untuk backpropagation dan update weight
+    self.weight_gradients = None # untuk simpan gradien bobot untuk update weight dan plotting???
 
   def forward(self, inputs): # untuk forward propagation
     if not isinstance(inputs, ValueTensor): inputs = ValueTensor(inputs)
@@ -90,8 +91,10 @@ class Layer:
     if not is_last:
       weight_T_no_bias = ValueTensor(np.array([row[:-1] for row in self.weights.data.T], dtype=object))
 
+    self.weight_gradients = ValueTensor(self.neuron_values.data.T) @ self.next_error
+
     # update weights
-    self.weights -= learning_rate * (ValueTensor(self.neuron_values.data.T) @ self.next_error)
+    self.weights -= learning_rate * self.weight_gradients
 
     if not is_last: return (self.next_error @ weight_T_no_bias)
     else: return

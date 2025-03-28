@@ -1,2 +1,7 @@
 # Tubes_ML_1
-Untuk tugas kuliah
+
+## Deskripsi
+
+## Cara menjalankan program
+
+## Pembagian Tugas
