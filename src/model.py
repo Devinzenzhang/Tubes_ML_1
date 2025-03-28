@@ -75,6 +75,16 @@ class FFNN:
         (print(f"Epoch {i+1}: Train Loss = {training_loss_array[i]}, Val Loss = {val_loss_array[i]}"))
     return training_loss_array, val_loss_array
 
+  def predict(self, x_val):
+    predictions = np.empty((0, self.output_size))
+    for i in range (len(x_val)):
+      values = [x_val[i]]
+      for j in range (len(self.input_and_hidden_layers)):
+        values = self.input_and_hidden_layers[j].forward(values)
+      predictions = np.vstack((predictions, np.vectorize(lambda x: x.data)(values.data)))
+    predictions = np.argmax(predictions, axis=1)
+    return predictions
+
   def weight_distribution(self, layers_list):
     # layers_list itu list of integer layer mana saja yang weightnya di plot (mulai dari 0 itu input layer)
     for i in range (len(layers_list)):
