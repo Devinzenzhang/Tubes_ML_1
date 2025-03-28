@@ -1,5 +1,8 @@
 from tqdm import tqdm  # Progress bar
-import pickle
+import dill
+import numpy as np
+
+from Layer import Layer, OutputLayer
 
 class FFNN:
   def __init__(self, input_size, hidden_size_array, output_size, activation_function, loss_function, weight_init):
@@ -75,12 +78,12 @@ class FFNN:
 
   def save_model(self, filename):
     with open(filename, "wb") as f:
-      pickle.dump(self, f)
+      dill.dump(self, f)
     print(f"Model saved to {filename}")
 
   @staticmethod
   def load_model(filename):
     with open(filename, "rb") as f:
-      model = pickle.load(f)
+      model = dill.load(f)
     print(f"Model loaded from {filename}")
     return model

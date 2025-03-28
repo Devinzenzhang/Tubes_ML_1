@@ -1,3 +1,7 @@
+import numpy as np
+
+from Value import Value
+
 # List of value
 class ValueTensor:
   def __init__(self, data, label="(h)"):

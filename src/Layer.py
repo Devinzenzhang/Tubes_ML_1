@@ -1,3 +1,7 @@
+import numpy as np
+
+from ValueTensor import ValueTensor, criterion
+
 class initialization:
   # kelas untuk inisialisasi bobot tiap neuron layer
   # beberapa cara inisialisasi: zero, uniform/normal distribution, xavier/he(bonus)
