@@ -3,11 +3,10 @@ import dill
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-from Layer import Layer, OutputLayer
+import networkx as nx
 
 class FFNN:
-  def __init__(self, input_size, hidden_size_array, output_size, activation_function, loss_function, weight_init):
+  def __init__(self, input_size, hidden_size_array, output_size, activation_function, loss_function, weight_init, regularization=None, lambda_=0.01):
     self.input_size = input_size # 784
     self.hidden_size_array = np.array(hidden_size_array).astype(int) # array jumlah neuron tiap hidden layer
     self.output_size = output_size # 10
@@ -16,6 +15,8 @@ class FFNN:
     self.activation_function = activation_function # array fungsi aktivasi setiap layer (termasuk output)
     self.loss_function = loss_function # hanya untuk output layer. MSE, Binary cross entropy, atau Categorical cross entropy
     self.weight_init = weight_init # array tuple (weight_init, weight_low_or_mean, weight_high_or_std, weight_seed, weight_type) inisialisasi bobot tiap layer (termasuk input)
+    self.regularization = regularization # L1, L2, atau None
+    self.lambda_ = lambda_ # lambda untuk regularization
 
     # asumsi model punya minimal satu hidden layer
     self.input_and_hidden_layers = [Layer(self.num_neurons[i], self.num_neurons[i+1], activation_function[i], weight_init[i][0], weight_init[i][1], weight_init[i][2], weight_init[i][3], weight_init[i][4]) for i in range (len(hidden_size_array) + 1)]
@@ -24,10 +25,14 @@ class FFNN:
   def forward_propagation(self, data, target):
     # forward propagation satu kali dalam satu batch
     values = data
+    weights = [self.input_and_hidden_layers[i].weights for i in range(len(self.num_neurons) - 1)]
     for i in range (len(self.input_and_hidden_layers)):
       values = self.input_and_hidden_layers[i].forward(values)
     self.output_layer.setPredictions(values, target)
-    self.output_layer.calculateLoss()
+    if (self.regularization is not None):
+      self.output_layer.calculateLoss(weights, self.regularization, self.lambda_)
+    else:
+      self.output_layer.calculateLoss()
     return self.output_layer.loss
 
   def back_propagation(self, learning_rate):
@@ -119,3 +124,65 @@ class FFNN:
       model = dill.load(f)
     print(f"Model loaded from {filename}")
     return model
+
+  def draw_graph(self):
+    visualizer = GraphNN(self)
+    visualizer.draw_graph()
+
+class GraphNN:
+  def __init__(self, model):
+    self.layer = model.num_neurons
+    self.weights = [model.input_and_hidden_layers[i].weights for i in range(len(self.layer)-1)]
+    self.graph = nx.DiGraph()
+    self.node_pos = {}
+    self.node_lab = {}
+
+    self.build_graph()
+  
+  def build_graph(self):
+    x_offset = 0
+    max_neurons = max(self.layer)
+
+    id_node = 0
+    prev_layer = []
+
+    for layer_idx, num_neuron in enumerate(self.layer):
+      y_offset = (max_neurons - num_neuron) / 2
+      current_layer = []
+
+      for i in range(num_neuron):
+        if layer_idx > 0 and layer_idx < len(self.layer) - 1:
+          label = "h"
+        elif layer_idx == len(self.layer) - 1:
+          label = "o"
+        else: 
+          label = "i"
+        neuron_label = f"{label}{i+1}"
+        self.graph.add_node(id_node, label=neuron_label)
+        self.node_pos[id_node] = (x_offset, - i -y_offset)
+        self.node_lab[id_node] = neuron_label
+        current_layer.append(id_node)
+        id_node += 1
+      
+      if prev_layer:
+        weight = self.weights[layer_idx - 1].data
+        for j, prev_node in enumerate(prev_layer):
+          for k, curr_node in enumerate(current_layer):
+            weight_val = weight[j, k].data
+            grad_val = weight[j, k].grad
+            self.graph.add_edge(prev_node, curr_node, weight=round(weight_val, 2), grad=round(grad_val, 2))
+
+      prev_layer = current_layer
+      x_offset += 2
+
+  def draw_graph(self):
+    plt.figure(figsize=(10,6))
+    edges = self.graph.edges(data=True)
+
+    nx.draw(self.graph, pos=self.node_pos, with_labels=True, labels=self.node_lab, node_size=800, node_color="lightgreen", font_size=10, edge_color="gray")
+
+    edge_labels = {(u, v): f"w={d['weight']}, g={d['grad']}" for u,v,d in edges}
+    nx.draw_networkx_edge_labels(self.graph, pos=self.node_pos, edge_labels=edge_labels, font_size=8)
+
+    plt.title("Struktur Jaringan dan Nilai Bobot")
+    plt.show()
