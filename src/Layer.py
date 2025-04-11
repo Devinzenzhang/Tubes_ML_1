@@ -120,7 +120,7 @@ class OutputLayer:
       elif (self.loss_function == "cce"): self.loss = criterion.categorical_cross_entropy(self.target, self.predicted)
       else: self.loss = criterion.mse(self.target, self.predicted) # self.loss_function == "mse"
     elif regularization == "L1":
-      reg = ValueTensor([weights[i].abs().sum().sum().data for i in range(len(weights))]).sum()
+      reg = ValueTensor([weights[i].abs().sum().data for i in range(len(weights))]).sum()
       if (self.loss_function == "bce"): self.loss = criterion.binary_cross_entropy(self.target, self.predicted) + (lambda_ * reg)
       elif (self.loss_function == "cce"): self.loss = criterion.categorical_cross_entropy(self.target, self.predicted) + (lambda_ * reg)
       else: self.loss = criterion.mse(self.target, self.predicted) + (lambda_ * reg) # self.loss_function == "mse"

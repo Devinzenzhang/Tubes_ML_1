@@ -16,9 +16,9 @@ class Value:
   # Multiply operator
   def __mul__(self, other):
     # self * other
-    # if isinstance(other, ValueTensor):
-    #   return other * self
-    if isinstance(other, Value):
+    if isinstance(other, ValueTensor):
+      return other + self
+    elif isinstance(other, Value):
       other = other
     else:
       other = Value(other)
@@ -31,6 +31,15 @@ class Value:
       self.grad += other.data * out.grad
 
     out._backward = _backward  # add _backward function to Value out
+
+    return out
+    
+  def abs(self):
+    out = Value(np.abs(self.data), (self,), "abs")
+
+    def _backward():
+      self.grad += np.sign(self.data) * out.grad
+    out._backward = _backward
 
     return out
 
@@ -79,9 +88,9 @@ class Value:
   # Add operator
   def __add__(self, other):
     # self + other
-    # if isinstance(other, ValueTensor):
-    #   return other + self
-    if isinstance(other, Value):
+    if isinstance(other, ValueTensor):
+      return other + self
+    elif isinstance(other, Value):
       other = other
     else:
       other = Value(other)
@@ -144,15 +153,6 @@ class Value:
 
     return out
 
-  def abs(self):
-    out = Value(np.abs(self.data), (self,), "abs")
-
-    def _backward():
-      self.grad += np.sign(self.data) * out.grad
-    out._backward = _backward
-
-    return out
-
   def clip(self, min_val, max_val):
     out_data = np.clip(self.data, min_val, max_val)
     out = Value(out_data, (self,), "clip")
@@ -190,7 +190,7 @@ class Value:
 
   # Activation function
   # Linear
-  def linear(self):
+  def lin(self):
     out = Value(self.data, (self,), "Linear")
 
     def _backward():
@@ -314,6 +314,11 @@ class ValueTensor:
   def mean(self, axis=0, **kwargs):
     result = np.mean(self.data, axis=axis, **kwargs)
     return ValueTensor(result)
+    
+  def abs(self):
+    # abs(self)
+    result = np.vectorize(lambda x: x.abs())(self.data)
+    return result
 
   def clip(self, min_val, max_val):
     result = np.vectorize(lambda x: x.clip(min_val, max_val))(self.data)
@@ -429,12 +434,6 @@ class ValueTensor:
 
     return ValueTensor(result)
 
-  def abs(self):
-    # abs(self)
-    result = np.vectorize(lambda x: x.abs())(self.data)
-
-    return ValueTensor(result)
-
   def __matmul__(self, other):
     if not isinstance(other, ValueTensor):
         raise TypeError(f"Cannot multiply ValueTensor with {type(other)}")
@@ -491,7 +490,7 @@ class ValueTensor:
     return other * self**(-1)
 
   def linear(self):
-    result = np.vectorize(lambda x: x.linear())(self.data)
+    result = np.vectorize(lambda x: x.lin())(self.data)
     return ValueTensor(result)
 
   def relu(self):
@@ -506,48 +505,63 @@ class ValueTensor:
     result = np.vectorize(lambda x: x.tanh())(self.data)
     return ValueTensor(result)
 
-  def softmax(self):
-    out = softmax(self.data)
-    return ValueTensor(out)
+  def softmax(self, axis=-1):
+    exp_data = self.exp()
+    sum_exp = np.sum(np.vectorize(lambda x: x.data)(exp_data.data), axis=axis, keepdims=True)
+
+    result = np.vectorize(lambda x, s: x / Value(s))(exp_data.data, sum_exp)
+    out = ValueTensor(result)
+
+    def _backward():
+        soft_vals = np.vectorize(lambda x: x.data)(out.data)
+        grad_output = np.vectorize(lambda x: x.grad)(out.data)
+
+        for i in range(soft_vals.shape[0]):
+            s = soft_vals[i].reshape(-1, 1)
+            jacobian = np.diagflat(s) - (s @ s.T)
+
+            grad_input = jacobian @ grad_output[i].reshape(-1, 1)
+
+            for j in range(soft_vals.shape[1]):
+                out.data[i, j].grad += grad_input[j, 0]
+
+    out._backward = _backward
+
+    return out
 
   def backward(self):
-    np.vectorize(lambda x: x.backward())(self.data)
+    visited = set()
 
-def softmax(values):
-    probs = []
-    for i in range(len(values)):
-      exps = [v.exp() for v in values[i]]
-      sum_exps = sum(exps)
+    def traverse(val):
+        if val not in visited:
+            visited.add(val)
+            for child in val._prev:
+                traverse(child)
 
-      probs_row = [e / sum_exps for e in exps]
-      probs.append(probs_row)
+    for val in np.ravel(self.data):
+        traverse(val)
 
-    probs = np.array(probs)
+    for val in visited: # set gradien 0
+        val.grad = 0
 
-    def _make_row_backward(row_idx):
-      def _backward():
-        probs_row = probs[row_idx]
-        out_grad = [v.grad for v in probs_row]
+    for val in np.ravel(self.data):
+        val.grad = 1
 
-        jac = np.zeros((len(probs_row), len(probs_row)))
-        for i, pi in enumerate(probs_row):
-            for j, pj in enumerate(probs_row):
-                if i == j:
-                    d = pi.data * (1 - pi.data)
-                else:
-                    d = -pi.data * pj.data
-                jac[i, j] = d
+    topo = []
+    visited_topo = set()
 
-        grad_input = jac @ out_grad
-        for j in range(len(values[row_idx])):
-          values[row_idx, j].grad = grad_input[j]
-      return _backward
+    def build_topo(val):
+        if val not in visited_topo:
+            visited_topo.add(val)
+            for child in val._prev:
+                build_topo(child)
+            topo.append(val)
 
-    for row in range(len(probs)):
-      row_backward = _make_row_backward(row)
-      probs[row, 0]._backward = row_backward
+    for val in np.ravel(self.data):
+        build_topo(val)
 
-    return probs
+    for val in reversed(topo):
+        val._backward()
 
 class criterion:
   # Loss
@@ -582,7 +596,7 @@ class criterion:
     y_pred = ValueTensor(y_pred.clip(1e-10, 1 - 1e-10))
 
     t1 = y_pred.log()
-    t2 = y_true * t1
+    t2 = y_true *  t1
     t3 = t2.sum(axis=-1)
     t3 = ValueTensor(np.expand_dims(t3.data, axis=0))
     t4 = t3.mean(axis=-1)
@@ -598,4 +612,3 @@ class criterion:
 
   def cce_errors(y_true, y_pred):
     return -1 * y_true / (y_pred * y_pred.shape[0])
-    
